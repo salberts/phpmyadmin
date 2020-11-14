@@ -1,5 +1,10 @@
 <?php
-
+/* vim: set expandtab sw=4 ts=4 sts=4: */
+/**
+ * hold PhpMyAdmin\Twig\I18n\NodeTrans class
+ *
+ * @package PhpMyAdmin\Twig\I18n
+ */
 declare(strict_types=1);
 
 namespace PhpMyAdmin\Twig\I18n;
@@ -8,13 +13,17 @@ use PhpMyAdmin\Twig\Extensions\Node\TransNode;
 use Twig\Compiler;
 use Twig\Node\Expression\AbstractExpression;
 use Twig\Node\Node;
-use function array_merge;
-use function str_replace;
-use function trim;
 
+/**
+ * Class NodeTrans
+ *
+ * @package PhpMyAdmin\Twig\I18n
+ */
 class NodeTrans extends TransNode
 {
     /**
+     * Constructor.
+     *
      * The nodes are automatically made available as properties ($this->node).
      * The attributes are automatically made available as array items ($this['name']).
      *
@@ -36,16 +45,16 @@ class NodeTrans extends TransNode
         string $tag
     ) {
         $nodes = ['body' => $body];
-        if ($count !== null) {
+        if (null !== $count) {
             $nodes['count'] = $count;
         }
-        if ($plural !== null) {
+        if (null !== $plural) {
             $nodes['plural'] = $plural;
         }
-        if ($context !== null) {
+        if (null !== $context) {
             $nodes['context'] = $context;
         }
-        if ($notes !== null) {
+        if (null !== $notes) {
             $nodes['notes'] = $notes;
         }
 
@@ -63,11 +72,10 @@ class NodeTrans extends TransNode
     {
         $compiler->addDebugInfo($this);
 
-        [$msg, $vars] = $this->compileString($this->getNode('body'));
+        list($msg, $vars) = $this->compileString($this->getNode('body'));
 
-        $msg1 = null;
         if ($this->hasNode('plural')) {
-            [$msg1, $vars1] = $this->compileString($this->getNode('plural'));
+            list($msg1, $vars1) = $this->compileString($this->getNode('plural'));
 
             $vars = array_merge($vars, $vars1);
         }
@@ -82,13 +90,14 @@ class NodeTrans extends TransNode
 
             // line breaks are not allowed cause we want a single line comment
             $message = str_replace(["\n", "\r"], ' ', $message);
-            $compiler->write('// l10n: ' . $message . "\n");
+            $compiler->write("// l10n: {$message}\n");
         }
 
         if ($vars) {
             $compiler
                 ->write('echo strtr(' . $function . '(')
-                ->subcompile($msg);
+                ->subcompile($msg)
+            ;
 
             if ($this->hasNode('plural')) {
                 $compiler
@@ -96,24 +105,27 @@ class NodeTrans extends TransNode
                     ->subcompile($msg1)
                     ->raw(', abs(')
                     ->subcompile($this->hasNode('count') ? $this->getNode('count') : null)
-                    ->raw(')');
+                    ->raw(')')
+                ;
             }
 
             $compiler->raw('), array(');
 
             foreach ($vars as $var) {
-                if ($var->getAttribute('name') === 'count') {
+                if ('count' === $var->getAttribute('name')) {
                     $compiler
                         ->string('%count%')
                         ->raw(' => abs(')
                         ->subcompile($this->hasNode('count') ? $this->getNode('count') : null)
-                        ->raw('), ');
+                        ->raw('), ')
+                    ;
                 } else {
                     $compiler
                         ->string('%' . $var->getAttribute('name') . '%')
                         ->raw(' => ')
                         ->subcompile($var)
-                        ->raw(', ');
+                        ->raw(', ')
+                    ;
                 }
             }
 
@@ -134,7 +146,8 @@ class NodeTrans extends TransNode
                     ->subcompile($msg1)
                     ->raw(', abs(')
                     ->subcompile($this->hasNode('count') ? $this->getNode('count') : null)
-                    ->raw(')');
+                    ->raw(')')
+                ;
             }
 
             $compiler->raw(");\n");
@@ -144,6 +157,8 @@ class NodeTrans extends TransNode
     /**
      * @param bool $plural        Return plural or singular function to use
      * @param bool $hasMsgContext It has message context?
+     *
+     * @return string
      */
     protected function getTransFunction($plural, bool $hasMsgContext = false): string
     {

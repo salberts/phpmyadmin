@@ -1,12 +1,16 @@
 <?php
+/* vim: set expandtab sw=4 ts=4 sts=4: */
 /**
  * Page-related settings
+ *
+ * @package PhpMyAdmin
  */
-
 declare(strict_types=1);
 
 namespace PhpMyAdmin\Config;
 
+use PhpMyAdmin\Config\ConfigFile;
+use PhpMyAdmin\Config\FormDisplay;
 use PhpMyAdmin\Config\Forms\Page\PageFormList;
 use PhpMyAdmin\Core;
 use PhpMyAdmin\Message;
@@ -15,41 +19,44 @@ use PhpMyAdmin\UserPreferences;
 
 /**
  * Page-related settings
+ *
+ * @package PhpMyAdmin
  */
 class PageSettings
 {
+
     /**
      * Contains id of the form element
-     *
      * @var string
      */
-    private $elemId = 'page_settings_modal';
+    private $_elemId = 'page_settings_modal';
 
     /**
      * Name of the group to show
-     *
      * @var string
      */
-    private $groupName = '';
+    private $_groupName = '';
 
     /**
      * Contains HTML of errors
-     *
      * @var string
      */
-    private $errorHTML = '';
+    private $_errorHTML = '';
 
     /**
      * Contains HTML of settings
-     *
      * @var string
      */
-    private $HTML = '';
+    private $_HTML = '';
 
-    /** @var UserPreferences */
+    /**
+     * @var UserPreferences
+     */
     private $userPreferences;
 
     /**
+     * Constructor
+     *
      * @param string $formGroupName The name of config form group to display
      * @param string $elemId        Id of the div containing settings
      */
@@ -67,11 +74,11 @@ class PageSettings
         }
 
         if (! empty($elemId)) {
-            $this->elemId = $elemId;
+            $this->_elemId = $elemId;
         }
-        $this->groupName = $formGroupName;
+        $this->_groupName = $formGroupName;
 
-        $cf = new ConfigFile($GLOBALS['PMA_Config']->baseSettings);
+        $cf = new ConfigFile($GLOBALS['PMA_Config']->base_settings);
         $this->userPreferences->pageInit($cf);
 
         $formDisplay = new $formClass($cf);
@@ -81,11 +88,11 @@ class PageSettings
         if (isset($_POST['submit_save'])
             && $_POST['submit_save'] == $formGroupName
         ) {
-            $this->processPageSettings($formDisplay, $cf, $error);
+            $this->_processPageSettings($formDisplay, $cf, $error);
         }
 
         // Display forms
-        $this->HTML = $this->getPageSettingsDisplay($formDisplay, $error);
+        $this->_HTML = $this->_getPageSettingsDisplay($formDisplay, $error);
     }
 
     /**
@@ -97,24 +104,22 @@ class PageSettings
      *
      * @return void
      */
-    private function processPageSettings(&$formDisplay, &$cf, &$error)
+    private function _processPageSettings(&$formDisplay, &$cf, &$error)
     {
-        if (! $formDisplay->process(false) || $formDisplay->hasErrors()) {
-            return;
+        if ($formDisplay->process(false) && ! $formDisplay->hasErrors()) {
+            // save settings
+            $result = $this->userPreferences->save($cf->getConfigArray());
+            if ($result === true) {
+                // reload page
+                $response = Response::getInstance();
+                Core::sendHeaderLocation(
+                    $response->getFooter()->getSelfUrl()
+                );
+                exit;
+            } else {
+                $error = $result;
+            }
         }
-
-        // save settings
-        $result = $this->userPreferences->save($cf->getConfigArray());
-        if ($result === true) {
-            // reload page
-            $response = Response::getInstance();
-            Core::sendHeaderLocation(
-                $response->getFooter()->getSelfUrl()
-            );
-            exit;
-        }
-
-        $error = $result;
     }
 
     /**
@@ -125,7 +130,7 @@ class PageSettings
      *
      * @return void
      */
-    private function storeError(&$formDisplay, &$error)
+    private function _storeError(&$formDisplay, &$error)
     {
         $retval = '';
         if ($error) {
@@ -133,7 +138,7 @@ class PageSettings
         }
         if ($formDisplay->hasErrors()) {
             // form has errors
-            $retval .= '<div class="alert alert-danger config-form" role="alert">'
+            $retval .= '<div class="error config-form">'
                 . '<b>' . __(
                     'Cannot save settings, submitted configuration form contains '
                     . 'errors!'
@@ -141,7 +146,7 @@ class PageSettings
                 . $formDisplay->displayErrors()
                 . '</div>';
         }
-        $this->errorHTML = $retval;
+        $this->_errorHTML = $retval;
     }
 
     /**
@@ -152,15 +157,15 @@ class PageSettings
      *
      * @return string
      */
-    private function getPageSettingsDisplay(&$formDisplay, &$error)
+    private function _getPageSettingsDisplay(&$formDisplay, &$error)
     {
         $response = Response::getInstance();
 
         $retval = '';
 
-        $this->storeError($formDisplay, $error);
+        $this->_storeError($formDisplay, $error);
 
-        $retval .= '<div id="' . $this->elemId . '">';
+        $retval .= '<div id="' . $this->_elemId . '">';
         $retval .= '<div class="page_settings">';
         $retval .= $formDisplay->getDisplay(
             true,
@@ -168,7 +173,7 @@ class PageSettings
             false,
             $response->getFooter()->getSelfUrl(),
             [
-                'submit_save' => $this->groupName,
+                'submit_save' => $this->_groupName,
             ]
         );
         $retval .= '</div>';
@@ -184,7 +189,7 @@ class PageSettings
      */
     public function getHTML()
     {
-        return $this->HTML;
+        return $this->_HTML;
     }
 
     /**
@@ -194,6 +199,35 @@ class PageSettings
      */
     public function getErrorHTML()
     {
-        return $this->errorHTML;
+        return $this->_errorHTML;
+    }
+
+    /**
+     * Group to show for Page-related settings
+     * @param string $formGroupName The name of config form group to display
+     * @return PageSettings
+     */
+    public static function showGroup($formGroupName)
+    {
+        $object = new PageSettings($formGroupName);
+
+        $response = Response::getInstance();
+        $response->addHTML($object->getErrorHTML());
+        $response->addHTML($object->getHTML());
+
+        return $object;
+    }
+
+    /**
+     * Get HTML for navigation settings
+     * @return string
+     */
+    public static function getNaviSettings()
+    {
+        $object = new PageSettings('Navi', 'pma_navigation_settings');
+
+        $response = Response::getInstance();
+        $response->addHTML($object->getErrorHTML());
+        return $object->getHTML();
     }
 }

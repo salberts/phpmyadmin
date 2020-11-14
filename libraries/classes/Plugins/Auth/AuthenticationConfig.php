@@ -1,33 +1,32 @@
 <?php
+/* vim: set expandtab sw=4 ts=4 sts=4: */
 /**
  * Config Authentication plugin for phpMyAdmin
+ *
+ * @package    PhpMyAdmin-Authentication
+ * @subpackage Config
  */
-
 declare(strict_types=1);
 
 namespace PhpMyAdmin\Plugins\Auth;
 
-use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Plugins\AuthenticationPlugin;
 use PhpMyAdmin\Response;
 use PhpMyAdmin\Server\Select;
+use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
-use const E_USER_NOTICE;
-use const E_USER_WARNING;
-use function count;
-use function defined;
-use function sprintf;
-use function trigger_error;
 
 /**
  * Handles the config authentication method
+ *
+ * @package PhpMyAdmin-Authentication
  */
 class AuthenticationConfig extends AuthenticationPlugin
 {
     /**
      * Displays authentication form
      *
-     * @return bool always true
+     * @return boolean always true
      */
     public function showLoginForm()
     {
@@ -38,9 +37,9 @@ class AuthenticationConfig extends AuthenticationPlugin
             $response->addJSON('reload_flag', '1');
             if (defined('TESTSUITE')) {
                 return true;
+            } else {
+                exit;
             }
-
-            exit;
         }
 
         return true;
@@ -49,7 +48,7 @@ class AuthenticationConfig extends AuthenticationPlugin
     /**
      * Gets authentication credentials
      *
-     * @return bool always true
+     * @return boolean always true
      */
     public function readCredentials()
     {
@@ -72,10 +71,8 @@ class AuthenticationConfig extends AuthenticationPlugin
      */
     public function showFailure($failure)
     {
-        global $dbi;
-
         parent::showFailure($failure);
-        $conn_error = $dbi->getError();
+        $conn_error = $GLOBALS['dbi']->getError();
         if (! $conn_error) {
             $conn_error = __('Cannot connect: invalid settings.');
         }
@@ -89,11 +86,11 @@ class AuthenticationConfig extends AuthenticationPlugin
         $header->setTitle(__('Access denied!'));
         $header->disableMenuAndConsole();
         echo '<br><br>
-    <div class="text-center">
+    <center>
         <h1>';
         echo sprintf(__('Welcome to %s'), ' phpMyAdmin ');
         echo '</h1>
-    </div>
+    </center>
     <br>
     <table cellpadding="0" cellspacing="3" class= "auth_config_tbl" width="80%">
         <tr>
@@ -104,7 +101,7 @@ class AuthenticationConfig extends AuthenticationPlugin
             trigger_error(__('Access denied!'), E_USER_NOTICE);
         } else {
             // Check whether user has configured something
-            if ($GLOBALS['PMA_Config']->sourceMtime == 0) {
+            if ($GLOBALS['PMA_Config']->source_mtime == 0) {
                 echo '<p>' , sprintf(
                     __(
                         'You probably did not create a configuration file.'
@@ -136,7 +133,7 @@ class AuthenticationConfig extends AuthenticationPlugin
                     E_USER_WARNING
                 );
             }
-            echo Generator::mysqlDie(
+            echo Util::mysqlDie(
                 $conn_error,
                 '',
                 true,
@@ -154,7 +151,7 @@ class AuthenticationConfig extends AuthenticationPlugin
                 $GLOBALS['cfg']['DefaultTabServer'],
                 'server'
             )
-            , '" class="btn button mt-1 disableAjax">'
+            , Url::getCommon() , '" class="button disableAjax">'
             , __('Retry to connect')
             , '</a>' , "\n";
         echo '</td>

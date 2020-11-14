@@ -1,7 +1,7 @@
 {% extends 'table/page_with_secondary_tabs.twig' %}
 
 {% block content %}
-<form method="post" action="{{ url('/table/relation') }}">
+<form method="post" action="tbl_relation.php">
     {{ get_hidden_inputs(db, table) }}
     {# InnoDB #}
     {% if is_foreign_key_supported(tbl_storage_engine) %}
@@ -100,9 +100,11 @@
 
     {% if cfg_relation['relwork'] %}
         {% if is_foreign_key_supported(tbl_storage_engine) %}
-            <div id="ir_div"{% if default_sliders_state != 'disabled' -%}
-                {{- default_sliders_state == 'closed' ? ' style="display: none; overflow:auto;"' }} class="pma_auto_slider" title="{% trans 'Internal relationships' %}"
-            {%- endif %}>
+            {% include 'div_for_slider_effect.twig' with {
+                'id': 'ir_div',
+                'message': 'Internal relationships'|trans,
+                'initial_sliders_state': default_sliders_state
+            } only %}
         {% endif %}
 
         <fieldset>
@@ -215,5 +217,7 @@
         <input class="btn btn-primary" type="submit" value="{% trans 'Save' %}">
     </fieldset>
 </form>
-
+{% if foreignKeySupported %}
+    {{ displayIndexesHtml|raw }}
+{% endif %}
 {% endblock %}

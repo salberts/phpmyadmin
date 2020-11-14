@@ -1,36 +1,36 @@
 <?php
+/* vim: set expandtab sw=4 ts=4 sts=4: */
 /**
  * SQL data types definition
+ *
+ * @package PhpMyAdmin
  */
-
 declare(strict_types=1);
 
 namespace PhpMyAdmin;
 
-use function array_diff;
-use function array_merge;
-use function array_push;
-use function htmlspecialchars;
-use function in_array;
-use function mb_strtoupper;
-use function sort;
-use function sprintf;
-use function strncasecmp;
+use PhpMyAdmin\DatabaseInterface;
 
 /**
  * Class holding type definitions for MySQL and MariaDB.
+ *
+ * @package PhpMyAdmin
  */
 class Types
 {
-    /** @var DatabaseInterface Database interface */
-    private $dbi;
+    /**
+     * @var DatabaseInterface Database interface
+     */
+    private $_dbi;
 
     /**
+     * Constructor
+     *
      * @param DatabaseInterface $dbi Database interface instance
      */
     public function __construct($dbi)
     {
-        $this->dbi = $dbi;
+        $this->_dbi = $dbi;
     }
 
     /**
@@ -53,7 +53,7 @@ class Types
      *
      * @param string $op operator name
      *
-     * @return bool
+     * @return boolean
      */
     public function isUnaryOperator($op)
     {
@@ -138,8 +138,8 @@ class Types
     /**
      * Returns operators for given type
      *
-     * @param string $type Type of field
-     * @param bool   $null Whether field can be NULL
+     * @param string  $type Type of field
+     * @param boolean $null Whether field can be NULL
      *
      * @return string[]
      */
@@ -150,7 +150,7 @@ class Types
 
         if (strncasecmp($type, 'enum', 4) == 0) {
             $ret = array_merge($ret, $this->getEnumOperators());
-        } elseif ($class === 'CHAR') {
+        } elseif ($class == 'CHAR') {
             $ret = array_merge($ret, $this->getTextOperators());
         } else {
             $ret = array_merge($ret, $this->getNumberOperators());
@@ -166,9 +166,9 @@ class Types
     /**
      * Returns operators for given type as html options
      *
-     * @param string $type             Type of field
-     * @param bool   $null             Whether field can be NULL
-     * @param string $selectedOperator Option to be selected
+     * @param string  $type             Type of field
+     * @param boolean $null             Whether field can be NULL
+     * @param string  $selectedOperator Option to be selected
      *
      * @return string Generated Html
      */
@@ -196,6 +196,7 @@ class Types
      * @param string $type The data type to get a description.
      *
      * @return string
+     *
      */
     public function getTypeDescription($type)
     {
@@ -289,9 +290,9 @@ class Types
                 );
             case 'YEAR':
                 return __(
-                    'A year in four-digit (4, default) or two-digit (2) format, the ' .
-                    'allowable values are 70 (1970) to 69 (2069) or 1901 to 2155 and ' .
-                    '0000'
+                    "A year in four-digit (4, default) or two-digit (2) format, the " .
+                    "allowable values are 70 (1970) to 69 (2069) or 1901 to 2155 and " .
+                    "0000"
                 );
             case 'CHAR':
                 return __(
@@ -364,11 +365,11 @@ class Types
                 );
             case 'ENUM':
                 return __(
-                    'An enumeration, chosen from the list of up to 65,535 values or ' .
+                    "An enumeration, chosen from the list of up to 65,535 values or " .
                     "the special '' error value"
                 );
             case 'SET':
-                return __('A single value chosen from a set of up to 64 members');
+                return __("A single value chosen from a set of up to 64 members");
             case 'GEOMETRY':
                 return __('A type that can store a geometry of any type');
             case 'POINT':
@@ -392,12 +393,7 @@ class Types
                     'Stores and enables efficient access to data in JSON'
                     . ' (JavaScript Object Notation) documents'
                 );
-            case 'INET6':
-                return __('Intended for storage of IPv6 addresses, as well as IPv4 '
-                    . 'addresses assuming conventional mapping of IPv4 addresses '
-                    . 'into IPv6 addresses');
         }
-
         return '';
     }
 
@@ -408,6 +404,7 @@ class Types
      * @param string $type The data type to get a class.
      *
      * @return string
+     *
      */
     public function getTypeClass($type)
     {
@@ -426,12 +423,14 @@ class Types
             case 'BOOLEAN':
             case 'SERIAL':
                 return 'NUMBER';
+
             case 'DATE':
             case 'DATETIME':
             case 'TIMESTAMP':
             case 'TIME':
             case 'YEAR':
                 return 'DATE';
+
             case 'CHAR':
             case 'VARCHAR':
             case 'TINYTEXT':
@@ -446,8 +445,8 @@ class Types
             case 'LONGBLOB':
             case 'ENUM':
             case 'SET':
-            case 'INET6':
                 return 'CHAR';
+
             case 'GEOMETRY':
             case 'POINT':
             case 'LINESTRING':
@@ -457,6 +456,7 @@ class Types
             case 'MULTIPOLYGON':
             case 'GEOMETRYCOLLECTION':
                 return 'SPATIAL';
+
             case 'JSON':
                 return 'JSON';
         }
@@ -470,11 +470,12 @@ class Types
      * @param string $class The class to get function list.
      *
      * @return string[]
+     *
      */
     public function getFunctionsClass($class)
     {
-        $isMariaDB = $this->dbi->isMariaDB();
-        $serverVersion = $this->dbi->getVersion();
+        $isMariaDB = $this->_dbi->isMariaDB();
+        $serverVersion = $this->_dbi->getVersion();
 
         switch ($class) {
             case 'CHAR':
@@ -516,12 +517,12 @@ class Types
                 ];
 
                 if (($isMariaDB && $serverVersion < 100012)
-                    || $serverVersion < 50603
+                || $serverVersion < 50603
                 ) {
                     $ret = array_diff($ret, ['INET6_NTOA']);
                 }
-
                 return $ret;
+
             case 'DATE':
                 return [
                     'CURRENT_DATE',
@@ -540,6 +541,7 @@ class Types
                     'UTC_TIMESTAMP',
                     'YEAR',
                 ];
+
             case 'NUMBER':
                 $ret = [
                     'ABS',
@@ -596,12 +598,12 @@ class Types
                     'YEARWEEK',
                 ];
                 if (($isMariaDB && $serverVersion < 100012)
-                    || $serverVersion < 50603
+                || $serverVersion < 50603
                 ) {
                     $ret = array_diff($ret, ['INET6_ATON']);
                 }
-
                 return $ret;
+
             case 'SPATIAL':
                 if ($serverVersion >= 50600) {
                     return [
@@ -624,30 +626,29 @@ class Types
                         'ST_PolyFromWKB',
                         'ST_MPolyFromWKB',
                     ];
+                } else {
+                    return [
+                        'GeomFromText',
+                        'GeomFromWKB',
+
+                        'GeomCollFromText',
+                        'LineFromText',
+                        'MLineFromText',
+                        'PointFromText',
+                        'MPointFromText',
+                        'PolyFromText',
+                        'MPolyFromText',
+
+                        'GeomCollFromWKB',
+                        'LineFromWKB',
+                        'MLineFromWKB',
+                        'PointFromWKB',
+                        'MPointFromWKB',
+                        'PolyFromWKB',
+                        'MPolyFromWKB',
+                    ];
                 }
-
-                return [
-                    'GeomFromText',
-                    'GeomFromWKB',
-
-                    'GeomCollFromText',
-                    'LineFromText',
-                    'MLineFromText',
-                    'PointFromText',
-                    'MPointFromText',
-                    'PolyFromText',
-                    'MPolyFromText',
-
-                    'GeomCollFromWKB',
-                    'LineFromWKB',
-                    'MLineFromWKB',
-                    'PointFromWKB',
-                    'MPointFromWKB',
-                    'PolyFromWKB',
-                    'MPolyFromWKB',
-                ];
         }
-
         return [];
     }
 
@@ -657,11 +658,11 @@ class Types
      * @param string $type The data type to get function list.
      *
      * @return string[]
+     *
      */
     public function getFunctions($type)
     {
         $class = $this->getTypeClass($type);
-
         return $this->getFunctionsClass($class);
     }
 
@@ -669,6 +670,7 @@ class Types
      * Returns array of all functions available.
      *
      * @return string[]
+     *
      */
     public function getAllFunctions()
     {
@@ -679,7 +681,6 @@ class Types
             $this->getFunctionsClass('UUID')
         );
         sort($ret);
-
         return $ret;
     }
 
@@ -687,6 +688,7 @@ class Types
      * Returns array of all attributes available.
      *
      * @return string[]
+     *
      */
     public function getAttributes()
     {
@@ -705,12 +707,13 @@ class Types
      * VARCHAR, TINYINT, TEXT and DATE are listed first, based on
      * estimated popularity.
      *
-     * @return array
+     * @return string[]
+     *
      */
-    public function getColumns(): array
+    public function getColumns()
     {
-        $isMariaDB = $this->dbi->isMariaDB();
-        $serverVersion = $this->dbi->getVersion();
+        $isMariaDB = $this->_dbi->isMariaDB();
+        $serverVersion = $this->_dbi->getVersion();
 
         // most used types
         $ret = [
@@ -780,13 +783,10 @@ class Types
         ];
 
         if (($isMariaDB && $serverVersion > 100207)
-            || (! $isMariaDB && $serverVersion >= 50708)
-        ) {
-            $ret['JSON'] = ['JSON'];
-        }
-
-        if ($isMariaDB && $serverVersion >= 100500) {
-            array_push($ret[_pgettext('string types', 'String')], '-', 'INET6');
+            || (! $isMariaDB && $serverVersion >= 50708)) {
+            $ret['JSON'] = [
+                'JSON',
+            ];
         }
 
         return $ret;
@@ -811,8 +811,8 @@ class Types
     /**
      * Returns the min and max values of a given integer type
      *
-     * @param string $type   integer type
-     * @param bool   $signed whether signed
+     * @param string  $type   integer type
+     * @param boolean $signed whether signed
      *
      * @return string[] min and max values
      */
@@ -867,8 +867,7 @@ class Types
         $relevantArray = $signed
             ? $min_max_data['signed']
             : $min_max_data['unsigned'];
-
-        return $relevantArray[$type] ?? [
+        return isset($relevantArray[$type]) ? $relevantArray[$type] : [
             '',
             '',
         ];

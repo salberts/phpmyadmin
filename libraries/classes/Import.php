@@ -1,47 +1,31 @@
 <?php
-
+/* vim: set expandtab sw=4 ts=4 sts=4: */
+/**
+ * Holds the PhpMyAdmin\Import class
+ *
+ * @package PhpMyAdmin-Import
+ */
 declare(strict_types=1);
 
 namespace PhpMyAdmin;
 
+use PhpMyAdmin\Encoding;
+use PhpMyAdmin\Message;
+use PhpMyAdmin\Response;
 use PhpMyAdmin\SqlParser\Parser;
 use PhpMyAdmin\SqlParser\Statements\DeleteStatement;
 use PhpMyAdmin\SqlParser\Statements\InsertStatement;
 use PhpMyAdmin\SqlParser\Statements\ReplaceStatement;
 use PhpMyAdmin\SqlParser\Statements\UpdateStatement;
 use PhpMyAdmin\SqlParser\Utils\Query;
-use function abs;
-use function count;
-use function explode;
-use function function_exists;
-use function htmlspecialchars;
-use function implode;
-use function is_array;
-use function is_numeric;
-use function max;
-use function mb_chr;
-use function mb_ord;
-use function mb_stripos;
-use function mb_strlen;
-use function mb_strpos;
-use function mb_strtoupper;
-use function mb_substr;
-use function mb_substr_count;
-use function pow;
-use function preg_match;
-use function preg_replace;
-use function sprintf;
-use function strcmp;
-use function strlen;
-use function strncmp;
-use function strpos;
-use function strtoupper;
-use function substr;
-use function time;
-use function trim;
+use PhpMyAdmin\Table;
+use PhpMyAdmin\Url;
+use PhpMyAdmin\Util;
 
 /**
  * Library that provides common import functions that are used by import plugins
+ *
+ * @package PhpMyAdmin
  */
 class Import
 {
@@ -65,21 +49,21 @@ class Import
     public const SIZES = 1;
     public const FORMATTEDSQL = 2;
 
+    /**
+     * Import constructor.
+     */
     public function __construct()
     {
-        global $dbi;
-
         $GLOBALS['cfg']['Server']['DisableIS'] = false;
 
-        $checkUserPrivileges = new CheckUserPrivileges($dbi);
+        $checkUserPrivileges = new CheckUserPrivileges($GLOBALS['dbi']);
         $checkUserPrivileges->getPrivileges();
     }
 
     /**
      * Checks whether timeout is getting close
      *
-     * @return bool true if timeout is close
-     *
+     * @return boolean true if timeout is close
      * @access public
      */
     public function checkTimeout(): bool
@@ -87,17 +71,11 @@ class Import
         global $timestamp, $maximum_time, $timeout_passed;
         if ($maximum_time == 0) {
             return false;
-        }
-
-        if ($timeout_passed) {
+        } elseif ($timeout_passed) {
             return true;
-
             /* 5 in next row might be too much */
-        }
-
-        if (time() - $timestamp > $maximum_time - 5) {
+        } elseif ((time() - $timestamp) > ($maximum_time - 5)) {
             $timeout_passed = true;
-
             return true;
         }
 
@@ -112,17 +90,20 @@ class Import
      * @param string $full     query to display, this might be commented
      * @param array  $sql_data SQL parse data storage
      *
+     * @return void
      * @access public
      */
     public function executeQuery(string $sql, string $full, array &$sql_data): void
     {
-        global $sql_query, $my_die, $error, $reload, $result, $msg, $cfg, $sql_query_disabled, $db, $dbi;
+        global $sql_query, $my_die, $error, $reload,
+            $result, $msg,
+            $cfg, $sql_query_disabled, $db;
 
-        $result = $dbi->tryQuery($sql);
+        $result = $GLOBALS['dbi']->tryQuery($sql);
 
         // USE query changes the database, son need to track
         // while running multiple queries
-        $is_use_query = mb_stripos($sql, 'use ') !== false;
+        $is_use_query = mb_stripos($sql, "use ") !== false;
 
         $msg = '# ';
         if ($result === false) { // execution failed
@@ -131,19 +112,18 @@ class Import
             }
             $my_die[] = [
                 'sql' => $full,
-                'error' => $dbi->getError(),
+                'error' => $GLOBALS['dbi']->getError(),
             ];
 
             $msg .= __('Error');
 
             if (! $cfg['IgnoreMultiSubmitErrors']) {
                 $error = true;
-
                 return;
             }
         } else {
-            $a_num_rows = (int) @$dbi->numRows($result);
-            $a_aff_rows = (int) @$dbi->affectedRows();
+            $a_num_rows = (int) @$GLOBALS['dbi']->numRows($result);
+            $a_aff_rows = (int) @$GLOBALS['dbi']->affectedRows();
             if ($a_num_rows > 0) {
                 $msg .= __('Rows') . ': ' . $a_num_rows;
             } elseif ($a_aff_rows > 0) {
@@ -173,7 +153,7 @@ class Import
         // If a 'USE <db>' SQL-clause was found and the query
         // succeeded, set our current $db to the new one
         if ($result != false) {
-            [$db, $reload] = $this->lookForUse(
+            list($db, $reload) = $this->lookForUse(
                 $sql,
                 $db,
                 $reload
@@ -182,13 +162,11 @@ class Import
 
         $pattern = '@^[\s]*(DROP|CREATE)[\s]+(IF EXISTS[[:space:]]+)'
             . '?(TABLE|DATABASE)[[:space:]]+(.+)@im';
-        if ($result == false
-            || ! preg_match($pattern, $sql)
+        if ($result != false
+            && preg_match($pattern, $sql)
         ) {
-            return;
+            $reload = true;
         }
-
-        $reload = true;
     }
 
     /**
@@ -199,6 +177,7 @@ class Import
      * @param string $full     query to display, this might be commented
      * @param array  $sql_data SQL parse data storage
      *
+     * @return void
      * @access public
      */
     public function runQuery(
@@ -216,7 +195,6 @@ class Import
                 $sql,
                 $full
             );
-
             return;
         }
 
@@ -229,7 +207,6 @@ class Import
                 $sql,
                 $full
             );
-
             return;
         }
 
@@ -288,7 +265,8 @@ class Import
                     $import_run_buffer['full'],
                     $sql_data
                 );
-            }
+            } // end run query
+            // end non empty query
         } elseif (! empty($import_run_buffer['full'])) {
             if ($go_sql) {
                 $complete_query .= $import_run_buffer['full'];
@@ -297,7 +275,7 @@ class Import
                 $sql_query .= $import_run_buffer['full'];
             }
         }
-        // check length of query unless we decided to pass it to /sql
+        // check length of query unless we decided to pass it to sql.php
         // (if $run_query is false, we are just displaying so show
         // the complete query in the textarea)
         if (! $go_sql && $run_query && ! empty($sql_query)) {
@@ -314,11 +292,9 @@ class Import
         $import_run_buffer = $this->runQueryPost($import_run_buffer, $sql, $full);
 
         // In case of ROLLBACK, notify the user.
-        if (! isset($_POST['rollback_query'])) {
-            return;
+        if (isset($_POST['rollback_query'])) {
+            $msg .= __('[ROLLBACK occurred.]');
         }
-
-        $msg .= __('[ROLLBACK occurred.]');
     }
 
     /**
@@ -336,14 +312,14 @@ class Import
         string $full
     ): ?array {
         if (! empty($sql) || ! empty($full)) {
-            return [
+            $import_run_buffer = [
                 'sql' => $sql,
                 'full' => $full,
             ];
+            return $import_run_buffer;
         }
 
         unset($GLOBALS['import_run_buffer']);
-
         return $import_run_buffer;
     }
 
@@ -355,7 +331,6 @@ class Import
      * @param bool   $reload reload
      *
      * @return array (current or new db, whether to reload)
-     *
      * @access public
      */
     public function lookForUse(?string $buffer, ?string $db, ?bool $reload): array
@@ -371,23 +346,26 @@ class Import
 
             $reload = true;
         }
-
         return [
             $db,
             $reload,
         ];
     }
 
+
     /**
      * Returns next part of imported file/buffer
      *
-     * @param int $size size of buffer to read (this is maximal size function will return)
+     * @param int $size size of buffer to read
+     *                  (this is maximal size function will return)
      *
      * @return string|bool part of file/buffer
+     * @access public
      */
-    public function getNextChunk(?File $importHandle = null, int $size = 32768)
+    public function getNextChunk(int $size = 32768)
     {
-        global $charset_conversion, $charset_of_file, $read_multiply;
+        global $import_handle, $charset_conversion, $charset_of_file,
+            $read_multiply;
 
         // Add some progression while reading large amount of data
         if ($read_multiply <= 8) {
@@ -409,28 +387,22 @@ class Import
             return true;
         }
 
-        if ($GLOBALS['import_file'] === 'none') {
+        if ($GLOBALS['import_file'] == 'none') {
             // Well this is not yet supported and tested,
             // but should return content of textarea
             if (mb_strlen($GLOBALS['import_text']) < $size) {
                 $GLOBALS['finished'] = true;
-
                 return $GLOBALS['import_text'];
+            } else {
+                $r = mb_substr($GLOBALS['import_text'], 0, $size);
+                $GLOBALS['offset'] += $size;
+                $GLOBALS['import_text'] = mb_substr($GLOBALS['import_text'], $size);
+                return $r;
             }
-
-            $r = mb_substr($GLOBALS['import_text'], 0, $size);
-            $GLOBALS['offset'] += $size;
-            $GLOBALS['import_text'] = mb_substr($GLOBALS['import_text'], $size);
-
-            return $r;
         }
 
-        if ($importHandle === null) {
-            return false;
-        }
-
-        $result = $importHandle->read($size);
-        $GLOBALS['finished'] = $importHandle->eof();
+        $result = $import_handle->read($size);
+        $GLOBALS['finished'] = $import_handle->eof();
         $GLOBALS['offset'] += $size;
 
         if ($charset_conversion) {
@@ -447,7 +419,6 @@ class Import
         if ($GLOBALS['offset'] == $size) {
             $result = $this->skipByteOrderMarksFromContents($result);
         }
-
         return $result;
     }
 
@@ -456,9 +427,10 @@ class Import
      * charsets, but feel free to add more, you can use wikipedia for
      * reference: <https://en.wikipedia.org/wiki/Byte_Order_Mark>)
      *
-     * @param string $contents The contents to strip BOM
-     *
      * @todo BOM could be used for charset autodetection
+     *
+     * @param string $contents The contents to strip BOM
+     * @return string
      */
     public function skipByteOrderMarksFromContents(string $contents): string
     {
@@ -467,16 +439,12 @@ class Import
         // UTF-8
         if (strncmp($contents, "\xEF\xBB\xBF", 3) === 0) {
             return substr($contents, 3);
-
             // UTF-16 BE, LE
-        }
-
-        if (strncmp($contents, "\xFE\xFF", 2) === 0
+        } elseif (strncmp($contents, "\xFE\xFF", 2) === 0
             || strncmp($contents, "\xFF\xFE", 2) === 0
         ) {
             return substr($contents, 2);
         }
-
         return $contents;
     }
 
@@ -503,13 +471,12 @@ class Import
      * @param int $num the column number
      *
      * @return string The column's "Excel" name
-     *
-     * @access public
+     * @access  public
      */
     public function getColumnAlphaName(int $num): string
     {
         $A = 65; // ASCII value for capital "A"
-        $col_name = '';
+        $col_name = "";
 
         if ($num > 26) {
             $div = (int) ($num / 26);
@@ -530,10 +497,10 @@ class Import
         if ($num == 0) {
             // use 'Z' if column number is 0,
             // this is necessary because A-Z has no 'zero'
-            $col_name .= mb_chr($A + 26 - 1);
+            $col_name .= mb_chr(($A + 26) - 1);
         } else {
             // convert column number to ASCII character
-            $col_name .= mb_chr($A + $num - 1);
+            $col_name .= mb_chr(($A + $num) - 1);
         }
 
         return $col_name;
@@ -551,8 +518,7 @@ class Import
      * @param string $name column name(i.e. "A", or "BC", etc.)
      *
      * @return int The column number
-     *
-     * @access public
+     * @access  public
      */
     public function getColumnNumberFromName(string $name): int
     {
@@ -565,7 +531,7 @@ class Import
         $column_number = 0;
         for ($i = 0; $i < $num_chars; ++$i) {
             // read string from back to front
-            $char_pos = $num_chars - 1 - $i;
+            $char_pos = ($num_chars - 1) - $i;
 
             // convert capital character to ASCII value
             // and subtract 64 to get corresponding decimal value
@@ -578,7 +544,6 @@ class Import
             // $i=0 : 1; $i=1 : 26; $i=2 : 676; ...
             $column_number += $number * pow(26, $i);
         }
-
         return $column_number;
     }
 
@@ -588,15 +553,14 @@ class Import
      * @param string $last_cumulative_size Size of type decimal
      *
      * @return int Precision of the given decimal size notation
-     *
-     * @access public
+     * @access  public
      */
     public function getDecimalPrecision(string $last_cumulative_size): int
     {
         return (int) substr(
             $last_cumulative_size,
             0,
-            (int) strpos($last_cumulative_size, ',')
+            strpos($last_cumulative_size, ",")
         );
     }
 
@@ -607,15 +571,14 @@ class Import
      * @param string $last_cumulative_size Size of type decimal
      *
      * @return int Scale of the given decimal size notation
-     *
-     * @access public
+     * @access  public
      */
     public function getDecimalScale(string $last_cumulative_size): int
     {
         return (int) substr(
             $last_cumulative_size,
-            strpos($last_cumulative_size, ',') + 1,
-            strlen($last_cumulative_size) - strpos($last_cumulative_size, ',')
+            strpos($last_cumulative_size, ",") + 1,
+            strlen($last_cumulative_size) - strpos($last_cumulative_size, ",")
         );
     }
 
@@ -626,14 +589,13 @@ class Import
      *
      * @return array Contains the precision, scale, and full size
      *                representation of the given decimal cell
-     *
-     * @access public
+     * @access  public
      */
     public function getDecimalSize(string $cell): array
     {
         $curr_size = mb_strlen($cell);
-        $decPos = mb_strpos($cell, '.');
-        $decPrecision = $curr_size - 1 - $decPos;
+        $decPos = mb_strpos($cell, ".");
+        $decPrecision = ($curr_size - 1) - $decPos;
 
         $m = $curr_size - 1;
         $d = $decPrecision;
@@ -641,7 +603,7 @@ class Import
         return [
             $m,
             $d,
-            $m . ',' . $d,
+            $m . "," . $d,
         ];
     }
 
@@ -649,20 +611,20 @@ class Import
      * Obtains the size of the given cell
      *
      * @param string|int $last_cumulative_size Last cumulative column size
-     * @param int|null   $last_cumulative_type Last cumulative column type
+     * @param int        $last_cumulative_type Last cumulative column type
      *                                         (NONE or VARCHAR or DECIMAL or INT or BIGINT)
      * @param int        $curr_type            Type of the current cell
      *                                         (NONE or VARCHAR or DECIMAL or INT or BIGINT)
      * @param string     $cell                 The current cell
      *
      * @return string|int Size of the given cell in the type-appropriate format
+     * @access  public
      *
-     * @access public
      * @todo    Handle the error cases more elegantly
      */
     public function detectSize(
         $last_cumulative_size,
-        ?int $last_cumulative_type,
+        int $last_cumulative_type,
         int $curr_type,
         string $cell
     ) {
@@ -673,9 +635,7 @@ class Import
          */
         if (! strcmp('NULL', $cell)) {
             return $last_cumulative_size;
-        }
-
-        if ($curr_type == self::VARCHAR) {
+        } elseif ($curr_type == self::VARCHAR) {
             /**
              * What to do if the current cell is of type VARCHAR
              */
@@ -688,9 +648,7 @@ class Import
                 }
 
                 return $last_cumulative_size;
-            }
-
-            if ($last_cumulative_type == self::DECIMAL) {
+            } elseif ($last_cumulative_type == self::DECIMAL) {
                 /**
                  * The last cumulative type was DECIMAL
                  */
@@ -701,9 +659,7 @@ class Import
                 }
 
                 return $oldM;
-            }
-
-            if ($last_cumulative_type == self::BIGINT || $last_cumulative_type == self::INT) {
+            } elseif ($last_cumulative_type == self::BIGINT || $last_cumulative_type == self::INT) {
                 /**
                  * The last cumulative type was BIGINT or INT
                  */
@@ -712,9 +668,7 @@ class Import
                 }
 
                 return $last_cumulative_size;
-            }
-
-            if (! isset($last_cumulative_type) || $last_cumulative_type == self::NONE) {
+            } elseif (! isset($last_cumulative_type) || $last_cumulative_type == self::NONE) {
                 /**
                  * This is the first row to be analyzed
                  */
@@ -729,9 +683,7 @@ class Import
              */
 
             return -1;
-        }
-
-        if ($curr_type == self::DECIMAL) {
+        } elseif ($curr_type == self::DECIMAL) {
             /**
              * What to do if the current cell is of type DECIMAL
              */
@@ -747,9 +699,7 @@ class Import
                 }
 
                 return $last_cumulative_size;
-            }
-
-            if ($last_cumulative_type == self::DECIMAL) {
+            } elseif ($last_cumulative_type == self::DECIMAL) {
                 /**
                  * The last cumulative type was DECIMAL
                  */
@@ -761,14 +711,12 @@ class Import
                 /* New val if M or D is greater than current largest */
                 if ($size[self::M] > $oldM || $size[self::D] > $oldD) {
                     /* Take the largest of both types */
-                    return (string) (($size[self::M] > $oldM ? $size[self::M] : $oldM)
-                        . ',' . ($size[self::D] > $oldD ? $size[self::D] : $oldD));
+                    return (string) ((($size[self::M] > $oldM) ? $size[self::M] : $oldM)
+                        . "," . (($size[self::D] > $oldD) ? $size[self::D] : $oldD));
                 }
 
                 return $last_cumulative_size;
-            }
-
-            if ($last_cumulative_type == self::BIGINT || $last_cumulative_type == self::INT) {
+            } elseif ($last_cumulative_type == self::BIGINT || $last_cumulative_type == self::INT) {
                 /**
                  * The last cumulative type was BIGINT or INT
                  */
@@ -779,10 +727,8 @@ class Import
                     return $size[self::FULL];
                 }
 
-                return $last_cumulative_size . ',' . $size[self::D];
-            }
-
-            if (! isset($last_cumulative_type) || $last_cumulative_type == self::NONE) {
+                return ($last_cumulative_size . "," . $size[self::D]);
+            } elseif (! isset($last_cumulative_type) || $last_cumulative_type == self::NONE) {
                 /**
                  * This is the first row to be analyzed
                  */
@@ -800,9 +746,7 @@ class Import
              */
 
             return -1;
-        }
-
-        if ($curr_type == self::BIGINT || $curr_type == self::INT) {
+        } elseif ($curr_type == self::BIGINT || $curr_type == self::INT) {
             /**
              * What to do if the current cell is of type BIGINT or INT
              */
@@ -815,9 +759,7 @@ class Import
                 }
 
                 return $last_cumulative_size;
-            }
-
-            if ($last_cumulative_type == self::DECIMAL) {
+            } elseif ($last_cumulative_type == self::DECIMAL) {
                 /**
                  * The last cumulative type was DECIMAL
                  */
@@ -833,10 +775,8 @@ class Import
                 }
 
                 /* Use $newInt + $oldD as new M */
-                return ($newInt + $oldD) . ',' . $oldD;
-            }
-
-            if ($last_cumulative_type == self::BIGINT || $last_cumulative_type == self::INT) {
+                return (($newInt + $oldD) . "," . $oldD);
+            } elseif ($last_cumulative_type == self::BIGINT || $last_cumulative_type == self::INT) {
                 /**
                  * The last cumulative type was BIGINT or INT
                  */
@@ -845,9 +785,7 @@ class Import
                 }
 
                 return $last_cumulative_size;
-            }
-
-            if (! isset($last_cumulative_type) || $last_cumulative_type == self::NONE) {
+            } elseif (! isset($last_cumulative_type) || $last_cumulative_type == self::NONE) {
                 /**
                  * This is the first row to be analyzed
                  */
@@ -884,8 +822,7 @@ class Import
      *
      * @return int  The MySQL type representation
      *               (VARCHAR or INT or BIGINT or DECIMAL or NONE)
-     *
-     * @access public
+     * @access  public
      */
     public function detectType(?int $last_cumulative_type, ?string $cell): int
     {
@@ -907,8 +844,8 @@ class Import
         }
 
         if ($cell == (string) (float) $cell
-            && mb_strpos((string) $cell, '.') !== false
-            && mb_substr_count((string) $cell, '.') === 1
+            && mb_strpos($cell, ".") !== false
+            && mb_substr_count($cell, ".") === 1
         ) {
             return self::DECIMAL;
         }
@@ -927,13 +864,13 @@ class Import
     /**
      * Determines if the column types are int, decimal, or string
      *
-     * @link https://wiki.phpmyadmin.net/pma/Import
-     *
      * @param array $table array(string $table_name, array $col_names, array $rows)
      *
      * @return array|bool array(array $types, array $sizes)
+     * @access  public
      *
-     * @access public
+     * @link https://wiki.phpmyadmin.net/pma/Import
+     *
      * @todo    Handle the error case more elegantly
      */
     public function analyzeTable(array &$table)
@@ -987,26 +924,24 @@ class Import
                  * If a type for this column has already been declared,
                  * only alter it if it was a number and a varchar was found
                  */
-                if ($curr_type == self::NONE) {
-                    continue;
-                }
-
-                if ($curr_type == self::VARCHAR) {
-                    $types[$i] = self::VARCHAR;
-                } elseif ($curr_type == self::DECIMAL) {
-                    if ($types[$i] != self::VARCHAR) {
-                        $types[$i] = self::DECIMAL;
-                    }
-                } elseif ($curr_type == self::BIGINT) {
-                    if ($types[$i] != self::VARCHAR && $types[$i] != self::DECIMAL) {
-                        $types[$i] = self::BIGINT;
-                    }
-                } elseif ($curr_type == self::INT) {
-                    if ($types[$i] != self::VARCHAR
-                        && $types[$i] != self::DECIMAL
-                        && $types[$i] != self::BIGINT
-                    ) {
-                        $types[$i] = self::INT;
+                if ($curr_type != self::NONE) {
+                    if ($curr_type == self::VARCHAR) {
+                        $types[$i] = self::VARCHAR;
+                    } elseif ($curr_type == self::DECIMAL) {
+                        if ($types[$i] != self::VARCHAR) {
+                            $types[$i] = self::DECIMAL;
+                        }
+                    } elseif ($curr_type == self::BIGINT) {
+                        if ($types[$i] != self::VARCHAR && $types[$i] != self::DECIMAL) {
+                            $types[$i] = self::BIGINT;
+                        }
+                    } elseif ($curr_type == self::INT) {
+                        if ($types[$i] != self::VARCHAR
+                            && $types[$i] != self::DECIMAL
+                            && $types[$i] != self::BIGINT
+                        ) {
+                            $types[$i] = self::INT;
+                        }
                     }
                 }
             }
@@ -1015,12 +950,10 @@ class Import
         /* Check to ensure that all types are valid */
         $len = count($types);
         for ($n = 0; $n < $len; ++$n) {
-            if (strcmp((string) self::NONE, (string) $types[$n])) {
-                continue;
+            if (! strcmp((string) self::NONE, (string) $types[$n])) {
+                $types[$n] = self::VARCHAR;
+                $sizes[$n] = '10';
             }
-
-            $types[$n] = self::VARCHAR;
-            $sizes[$n] = '10';
         }
 
         return [
@@ -1033,8 +966,6 @@ class Import
      * Builds and executes SQL statements to create the database and tables
      * as necessary, as well as insert all the data.
      *
-     * @link https://wiki.phpmyadmin.net/pma/Import
-     *
      * @param string     $db_name        Name of the database
      * @param array      $tables         Array of tables for the specified database
      * @param array|null $analyses       Analyses of the tables
@@ -1042,7 +973,10 @@ class Import
      * @param array|null $options        Associative array of options
      * @param array      $sql_data       2-element array with sql data
      *
-     * @access public
+     * @return void
+     * @access  public
+     *
+     * @link https://wiki.phpmyadmin.net/pma/Import
      */
     public function buildSql(
         string $db_name,
@@ -1052,8 +986,6 @@ class Import
         ?array $options = null,
         array &$sql_data
     ): void {
-        global $import_notice, $dbi;
-
         /* Needed to quell the beast that is Message */
         $import_notice = null;
 
@@ -1061,13 +993,13 @@ class Import
         if (isset($options['db_collation']) && $options['db_collation'] !== null) {
             $collation = $options['db_collation'];
         } else {
-            $collation = 'utf8_general_ci';
+            $collation = "utf8_general_ci";
         }
 
         if (isset($options['db_charset']) && $options['db_charset'] !== null) {
             $charset = $options['db_charset'];
         } else {
-            $charset = 'utf8';
+            $charset = "utf8";
         }
 
         if (isset($options['create_db'])) {
@@ -1076,17 +1008,13 @@ class Import
             $create_db = true;
         }
 
-        /**
-         * Create SQL code to handle the database
-         *
-         * @var array<int,string> $sql
-         */
+        /* Create SQL code to handle the database */
         $sql = [];
 
         if ($create_db) {
-            $sql[] = 'CREATE DATABASE IF NOT EXISTS ' . Util::backquote($db_name)
-                . ' DEFAULT CHARACTER SET ' . $charset . ' COLLATE ' . $collation
-                . ';';
+            $sql[] = "CREATE DATABASE IF NOT EXISTS " . Util::backquote($db_name)
+                . " DEFAULT CHARACTER SET " . $charset . " COLLATE " . $collation
+                . ";";
         }
 
         /**
@@ -1140,11 +1068,11 @@ class Import
 
         if ($analyses != null) {
             $type_array = [
-                self::NONE => 'NULL',
-                self::VARCHAR => 'varchar',
-                self::INT => 'int',
-                self::DECIMAL => 'decimal',
-                self::BIGINT => 'bigint',
+                self::NONE => "NULL",
+                self::VARCHAR => "varchar",
+                self::INT => "int",
+                self::DECIMAL => "decimal",
+                self::BIGINT => "bigint",
                 self::GEOMETRY => 'geometry',
             ];
 
@@ -1157,9 +1085,9 @@ class Import
             $num_tables = count($tables);
             for ($i = 0; $i < $num_tables; ++$i) {
                 $num_cols = count($tables[$i][self::COL_NAMES]);
-                $tempSQLStr = 'CREATE TABLE IF NOT EXISTS '
+                $tempSQLStr = "CREATE TABLE IF NOT EXISTS "
                 . Util::backquote($db_name)
-                . '.' . Util::backquote($tables[$i][self::TBL_NAME]) . ' (';
+                . '.' . Util::backquote($tables[$i][self::TBL_NAME]) . " (";
                 for ($j = 0; $j < $num_cols; ++$j) {
                     $size = $analyses[$i][self::SIZES][$j];
                     if ((int) $size == 0) {
@@ -1168,20 +1096,18 @@ class Import
 
                     $tempSQLStr .= Util::backquote(
                         $tables[$i][self::COL_NAMES][$j]
-                    ) . ' '
+                    ) . " "
                     . $type_array[$analyses[$i][self::TYPES][$j]];
                     if ($analyses[$i][self::TYPES][$j] != self::GEOMETRY) {
-                        $tempSQLStr .= '(' . $size . ')';
+                        $tempSQLStr .= "(" . $size . ")";
                     }
 
-                    if ($j == count($tables[$i][self::COL_NAMES]) - 1) {
-                        continue;
+                    if ($j != (count($tables[$i][self::COL_NAMES]) - 1)) {
+                        $tempSQLStr .= ", ";
                     }
-
-                    $tempSQLStr .= ', ';
                 }
-                $tempSQLStr .= ') DEFAULT CHARACTER SET ' . $charset
-                    . ' COLLATE ' . $collation . ';';
+                $tempSQLStr .= ") DEFAULT CHARACTER SET " . $charset
+                    . " COLLATE " . $collation . ";";
 
                 /**
                  * Each SQL statement is executed immediately
@@ -1197,30 +1123,28 @@ class Import
          *
          * Only one insert query is formed for each table
          */
-        $tempSQLStr = '';
+        $tempSQLStr = "";
         $col_count = 0;
         $num_tables = count($tables);
         for ($i = 0; $i < $num_tables; ++$i) {
             $num_cols = count($tables[$i][self::COL_NAMES]);
             $num_rows = count($tables[$i][self::ROWS]);
 
-            $tempSQLStr = 'INSERT INTO ' . Util::backquote($db_name) . '.'
-                . Util::backquote($tables[$i][self::TBL_NAME]) . ' (';
+            $tempSQLStr = "INSERT INTO " . Util::backquote($db_name) . '.'
+                . Util::backquote($tables[$i][self::TBL_NAME]) . " (";
 
             for ($m = 0; $m < $num_cols; ++$m) {
                 $tempSQLStr .= Util::backquote($tables[$i][self::COL_NAMES][$m]);
 
-                if ($m == $num_cols - 1) {
-                    continue;
+                if ($m != ($num_cols - 1)) {
+                    $tempSQLStr .= ", ";
                 }
-
-                $tempSQLStr .= ', ';
             }
 
-            $tempSQLStr .= ') VALUES ';
+            $tempSQLStr .= ") VALUES ";
 
             for ($j = 0; $j < $num_rows; ++$j) {
-                $tempSQLStr .= '(';
+                $tempSQLStr .= "(";
 
                 for ($k = 0; $k < $num_cols; ++$k) {
                     // If fully formatted SQL, no need to enclose
@@ -1242,18 +1166,18 @@ class Import
                             $is_varchar = false;
                         }
 
-                        $tempSQLStr .= $is_varchar ? "'" : '';
-                        $tempSQLStr .= $dbi->escapeString(
+                        $tempSQLStr .= $is_varchar ? "'" : "";
+                        $tempSQLStr .= $GLOBALS['dbi']->escapeString(
                             (string) $tables[$i][self::ROWS][$j][$k]
                         );
-                        $tempSQLStr .= $is_varchar ? "'" : '';
+                        $tempSQLStr .= $is_varchar ? "'" : "";
                     }
 
-                    if ($k != $num_cols - 1) {
-                        $tempSQLStr .= ', ';
+                    if ($k != ($num_cols - 1)) {
+                        $tempSQLStr .= ", ";
                     }
 
-                    if ($col_count == $num_cols - 1) {
+                    if ($col_count == ($num_cols - 1)) {
                         $col_count = 0;
                     } else {
                         $col_count++;
@@ -1263,9 +1187,9 @@ class Import
                     unset($tables[$i][self::ROWS][$j][$k]);
                 }
 
-                $tempSQLStr .= ')';
+                $tempSQLStr .= ")";
 
-                if ($j != $num_rows - 1) {
+                if ($j != ($num_rows - 1)) {
                     $tempSQLStr .= ",\n ";
                 }
 
@@ -1274,7 +1198,7 @@ class Import
                 unset($tables[$i][self::ROWS][$j]);
             }
 
-            $tempSQLStr .= ';';
+            $tempSQLStr .= ";";
 
             /**
              * Each SQL statement is executed immediately
@@ -1329,8 +1253,8 @@ class Import
         }
 
         $params = ['db' => $db_name];
-        $db_url = Url::getFromRoute('/database/structure', $params);
-        $db_ops_url = Url::getFromRoute('/database/operations', $params);
+        $db_url = 'db_structure.php' . Url::getCommon($params);
+        $db_ops_url = 'db_operations.php' . Url::getCommon($params);
 
         $message = '<br><br>';
         $message .= '<strong>' . __(
@@ -1369,9 +1293,9 @@ class Import
                 'db' => $db_name,
                 'table' => (string) $table[self::TBL_NAME],
             ];
-            $tbl_url = Url::getFromRoute('/sql', $params);
-            $tbl_struct_url = Url::getFromRoute('/table/structure', $params);
-            $tbl_ops_url = Url::getFromRoute('/table/operations', $params);
+            $tbl_url = 'sql.php' . Url::getCommon($params);
+            $tbl_struct_url = 'tbl_structure.php' . Url::getCommon($params);
+            $tbl_ops_url = 'tbl_operations.php' . Url::getCommon($params);
 
             unset($params);
 
@@ -1421,16 +1345,51 @@ class Import
 
         $message .= '</ul></ul>';
 
+        global $import_notice;
         $import_notice = $message;
+    }
+
+
+    /**
+     * Stops the import on (mostly upload/file related) error
+     *
+     * @param Message $error_message The error message
+     *
+     * @return void
+     * @access  public
+     *
+     */
+    public function stop(Message $error_message): void
+    {
+        global $import_handle, $file_to_unlink;
+
+        // Close open handles
+        if ($import_handle !== false && $import_handle !== null) {
+            $import_handle->close();
+        }
+
+        // Delete temporary file
+        if ($file_to_unlink != '') {
+            unlink($file_to_unlink);
+        }
+        $msg = $error_message->getDisplay();
+        $_SESSION['Import_message']['message'] = $msg;
+
+        $response = Response::getInstance();
+        $response->setRequestStatus(false);
+        $response->addJSON('message', $msg);
+        $response->addHTML($msg);
+
+        exit;
     }
 
     /**
      * Handles request for Simulation of UPDATE/DELETE queries.
+     *
+     * @return void
      */
     public function handleSimulateDmlRequest(): void
     {
-        global $dbi;
-
         $response = Response::getInstance();
         $error = false;
         $error_msg = __('Only single-table UPDATE and DELETE queries can be simulated.');
@@ -1457,8 +1416,8 @@ class Import
                 'statement' => $statement,
             ];
 
-            if (! ($statement instanceof UpdateStatement
-                    || $statement instanceof DeleteStatement)
+            if ((! (($statement instanceof UpdateStatement)
+                || ($statement instanceof DeleteStatement)))
                 || ! empty($statement->join)
             ) {
                 $error = $error_msg;
@@ -1473,13 +1432,11 @@ class Import
 
             // Get the matched rows for the query.
             $result = $this->getMatchedRows($analyzed_sql_results);
-            $error = $dbi->getError();
-
-            if ($error) {
+            if (! $error = $GLOBALS['dbi']->getError()) {
+                $sql_data[] = $result;
+            } else {
                 break;
             }
-
-            $sql_data[] = $result;
         }
 
         if ($error) {
@@ -1517,10 +1474,10 @@ class Import
             'db'        => $GLOBALS['db'],
             'sql_query' => $matched_row_query,
         ];
-        $matched_rows_url  = Url::getFromRoute('/sql', $_url_params);
+        $matched_rows_url  = 'sql.php' . Url::getCommon($_url_params);
 
         return [
-            'sql_query' => Html\Generator::formatSql($analyzed_sql_results['query']),
+            'sql_query' => Util::formatSql($analyzed_sql_results['query']),
             'matched_rows' => $matched_rows,
             'matched_rows_url' => $matched_rows_url,
         ];
@@ -1554,7 +1511,7 @@ class Import
         foreach ($analyzed_sql_results['statement']->set as $set) {
             $columns[] = $set->column;
             $not_equal_operator = ' <> ';
-            if (strtoupper($set->value) === 'NULL') {
+            if (strtoupper($set->value) == 'NULL') {
                 $not_equal_operator = ' IS NOT ';
             }
             $diff[] = $set->column . $not_equal_operator . $set->value;
@@ -1636,17 +1593,15 @@ class Import
      *
      * @param string $matched_row_query SQL query
      *
-     * @return int Number of rows returned
+     * @return integer Number of rows returned
      */
     public function executeMatchedRowQuery(string $matched_row_query): int
     {
-        global $dbi;
-
-        $dbi->selectDb($GLOBALS['db']);
+        $GLOBALS['dbi']->selectDb($GLOBALS['db']);
         // Execute the query.
-        $result = $dbi->tryQuery($matched_row_query);
+        $result = $GLOBALS['dbi']->tryQuery($matched_row_query);
         // Count the number of rows in the result set.
-        $result = $dbi->numRows($result);
+        $result = $GLOBALS['dbi']->numRows($result);
 
         return $result;
     }
@@ -1655,11 +1610,11 @@ class Import
      * Handles request for ROLLBACK.
      *
      * @param string $sql_query SQL query(s)
+     *
+     * @return void
      */
     public function handleRollbackRequest(string $sql_query): void
     {
-        global $dbi;
-
         $sql_delimiter = $_POST['sql_delimiter'];
         $queries = explode($sql_delimiter, $sql_query);
         $error = false;
@@ -1673,17 +1628,15 @@ class Import
             }
 
             // Check each query for ROLLBACK support.
-            if ($this->checkIfRollbackPossible($sql_query)) {
-                continue;
+            if (! $this->checkIfRollbackPossible($sql_query)) {
+                $global_error = $GLOBALS['dbi']->getError();
+                if ($global_error) {
+                    $error = $global_error;
+                } else {
+                    $error = $error_msg;
+                }
+                break;
             }
-
-            $global_error = $dbi->getError();
-            if ($global_error) {
-                $error = $global_error;
-            } else {
-                $error = $error_msg;
-            }
-            break;
         }
 
         if ($error) {
@@ -1692,16 +1645,18 @@ class Import
             $message = Message::rawError($error);
             $response->addJSON('message', $message);
             exit;
+        } else {
+            // If everything fine, START a transaction.
+            $GLOBALS['dbi']->query('START TRANSACTION');
         }
-
-        // If everything fine, START a transaction.
-        $dbi->query('START TRANSACTION');
     }
 
     /**
      * Checks if ROLLBACK is possible for a SQL query or not.
      *
      * @param string $sql_query SQL query
+     *
+     * @return bool
      */
     public function checkIfRollbackPossible(string $sql_query): bool
     {
@@ -1739,11 +1694,11 @@ class Import
      * Checks if a table is 'InnoDB' or not.
      *
      * @param string $table Table details
+     *
+     * @return bool
      */
     public function isTableTransactional(string $table): bool
     {
-        global $dbi;
-
         $table = explode('.', $table);
         if (count($table) === 2) {
             $db = Util::unQuote($table[0]);
@@ -1758,7 +1713,7 @@ class Import
             . '.' . Util::backquote($table) . ' '
             . 'LIMIT 1';
 
-        $result = $dbi->tryQuery($check_table_query);
+        $result = $GLOBALS['dbi']->tryQuery($check_table_query);
 
         if (! $result) {
             return false;
@@ -1784,58 +1739,8 @@ class Import
             . implode('", "', $transactional_engines)
             . '")';
 
-        $result = $dbi->tryQuery($check_query);
+        $result = $GLOBALS['dbi']->tryQuery($check_query);
 
-        return $dbi->numRows($result) == 1;
-    }
-
-    /** @return string[] */
-    public static function getCompressions(): array
-    {
-        global $cfg;
-
-        $compressions = [];
-
-        if ($cfg['GZipDump'] && function_exists('gzopen')) {
-            $compressions[] = 'gzip';
-        }
-        if ($cfg['BZipDump'] && function_exists('bzopen')) {
-            $compressions[] = 'bzip2';
-        }
-        if ($cfg['ZipDump'] && function_exists('zip_open')) {
-            $compressions[] = 'zip';
-        }
-
-        return $compressions;
-    }
-
-    /**
-     * @param array $importList List of plugin instances.
-     *
-     * @return false|string
-     */
-    public static function getLocalFiles(array $importList)
-    {
-        $fileListing = new FileListing();
-
-        $extensions = '';
-        foreach ($importList as $importPlugin) {
-            if (! empty($extensions)) {
-                $extensions .= '|';
-            }
-            $extensions .= $importPlugin->getProperties()->getExtension();
-        }
-
-        $matcher = '@\.(' . $extensions . ')(\.(' . $fileListing->supportedDecompressions() . '))?$@';
-
-        $active = isset($GLOBALS['timeout_passed'], $GLOBALS['local_import_file']) && $GLOBALS['timeout_passed']
-            ? $GLOBALS['local_import_file']
-            : '';
-
-        return $fileListing->getFileSelectOptions(
-            Util::userDir($GLOBALS['cfg']['UploadDir'] ?? ''),
-            $matcher,
-            $active
-        );
+        return $GLOBALS['dbi']->numRows($result) == 1;
     }
 }

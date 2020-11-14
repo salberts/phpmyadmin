@@ -1,13 +1,22 @@
 <?php
-
+/* vim: set expandtab sw=4 ts=4 sts=4: */
+/**
+ * hold PhpMyAdmin\Twig\I18n\TokenParserTrans class
+ *
+ * @package PhpMyAdmin\Twig\I18n
+ */
 declare(strict_types=1);
 
 namespace PhpMyAdmin\Twig\I18n;
 
 use PhpMyAdmin\Twig\Extensions\TokenParser\TransTokenParser;
-use Twig\Error\SyntaxError;
 use Twig\Token;
 
+/**
+ * Class TokenParserTrans
+ *
+ * @package PhpMyAdmin\Twig\I18n
+ */
 class TokenParserTrans extends TransTokenParser
 {
     /**
@@ -17,7 +26,7 @@ class TokenParserTrans extends TransTokenParser
      *
      * @return NodeTrans
      *
-     * @throws SyntaxError
+     * @throws \Twig\Error\SyntaxError
      */
     public function parse(Token $token)
     {
@@ -35,19 +44,19 @@ class TokenParserTrans extends TransTokenParser
             $body = $this->parser->subparse([$this, 'decideForFork']);
             $next = $stream->next()->getValue();
 
-            if ($next === 'plural') {
+            if ('plural' === $next) {
                 $count = $this->parser->getExpressionParser()->parseExpression();
                 $stream->expect(Token::BLOCK_END_TYPE);
                 $plural = $this->parser->subparse([$this, 'decideForFork']);
 
-                if ($stream->next()->getValue() === 'notes') {
+                if ('notes' === $stream->next()->getValue()) {
                     $stream->expect(Token::BLOCK_END_TYPE);
                     $notes = $this->parser->subparse([$this, 'decideForEnd'], true);
                 }
-            } elseif ($next === 'context') {
+            } elseif ('context' === $next) {
                 $stream->expect(Token::BLOCK_END_TYPE);
                 $context = $this->parser->subparse([$this, 'decideForEnd'], true);
-            } elseif ($next === 'notes') {
+            } elseif ('notes' === $next) {
                 $stream->expect(Token::BLOCK_END_TYPE);
                 $notes = $this->parser->subparse([$this, 'decideForEnd'], true);
             }
